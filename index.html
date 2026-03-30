@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ML Rutas Optimizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #162033;
+      --muted: #62708a;
+      --line: #d9dfeb;
+      --accent: #111827;
+      --accent-2: #2563eb;
+      --danger: #dc2626;
+      --ok: #16a34a;
+      --warn: #d97706;
+      --soft: #eef2ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 18px;
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+    .grid-hero {
+      grid-template-columns: 1.4fr 0.9fr;
+    }
+    .grid-main {
+      grid-template-columns: 1fr 1fr;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 18px;
+      box-shadow: 0 8px 30px rgba(15, 23, 42, 0.04);
+    }
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .title h1, .title h2, .title h3, p {
+      margin: 0;
+    }
+    .icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .stat {
+      background: #fbfcff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+    }
+    .stat .k {
+      font-size: 28px;
+      font-weight: 800;
+      margin-top: 8px;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .row.space {
+      justify-content: space-between;
+    }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 14px;
+      background: white;
+      color: var(--text);
+      outline: none;
+    }
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+    }
+    button, .btn-link {
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-secondary { background: #eef2f7; color: var(--text); }
+    .btn-danger { background: #fee2e2; color: #991b1b; }
+    .btn-success { background: #dcfce7; color: #166534; }
+    .btn-link { background: var(--accent-2); color: white; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #eef2ff;
+      color: #334155;
+    }
+    .section {
+      margin-top: 16px;
+    }
+    .drop {
+      border: 2px dashed var(--line);
+      background: #fbfcff;
+      border-radius: 20px;
+      padding: 28px;
+      text-align: center;
+    }
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .preview {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      background: white;
+    }
+    .preview img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      display: block;
+      background: #e5e7eb;
+    }
+    .preview .meta {
+      padding: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .video-box {
+      border-radius: 20px;
+      overflow: hidden;
+      background: #000;
+      border: 1px solid var(--line);
+    }
+    video {
+      width: 100%;
+      max-height: 380px;
+      display: block;
+      background: #000;
+    }
+    .list {
+      display: grid;
+      gap: 10px;
+      max-height: 560px;
+      overflow: auto;
+    }
+    .stop {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 12px;
+      background: white;
+    }
+    .stop-head {
+      display: grid;
+      grid-template-columns: 42px 1fr auto;
+      gap: 10px;
+      align-items: start;
+    }
+    .index {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: var(--accent);
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+    }
+    .route-block {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      background: white;
+      margin-bottom: 12px;
+    }
+    .route-stop {
+      margin-top: 8px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid #edf2f7;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    .progress-wrap {
+      display: none;
+      margin-top: 12px;
+    }
+    .progress {
+      width: 100%;
+      height: 10px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress > div {
+      height: 100%;
+      width: 0%;
+      background: var(--accent-2);
+    }
+    .status {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .tips {
+      display: grid;
+      gap: 10px;
+    }
+    .tip {
+      background: #fbfcff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      font-size: 14px;
+    }
+    .warn {
+      background: #fff7ed;
+      border-color: #fed7aa;
+      color: #9a3412;
+    }
+    .small { font-size: 12px; }
+    .hidden { display: none !important; }
+    .tabbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .tabbtn {
+      background: white;
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+    .tabbtn.active {
+      background: var(--accent);
+      color: white;
+    }
+    .tabpanel { display: none; margin-top: 16px; }
+    .tabpanel.active { display: block; }
+    @media (max-width: 980px) {
+      .grid-hero, .grid-main { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .stop-head { grid-template-columns: 42px 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="grid grid-hero">
+      <div class="card">
+        <div class="title">
+          <div class="icon">ML</div>
+          <div>
+            <h1>ML Rutas Optimizer</h1>
+            <p class="muted">OCR + captura de pantalla + ruta optimizada + bloques para Google Maps</p>
+          </div>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><div class="muted">Paradas</div><div class="k" id="statStops">0</div></div>
+          <div class="stat"><div class="muted">Ubicadas</div><div class="k" id="statResolved">0</div></div>
+          <div class="stat"><div class="muted">Pendientes</div><div class="k" id="statUnresolved">0</div></div>
+          <div class="stat"><div class="muted">Bloques Maps</div><div class="k" id="statBlocks">0</div></div>
+        </div>
+
+        <div class="section grid" style="grid-template-columns:1fr 180px;">
+          <input id="startAddress" value="Mercado Libre San Luis Potosí" placeholder="Punto de salida" />
+          <input id="batchSize" type="number" min="2" max="9" value="9" />
+        </div>
+
+        <div class="progress-wrap" id="progressWrap">
+          <div class="muted" id="progressLabel">Procesando...</div>
+          <div class="progress"><div id="progressBar"></div></div>
+        </div>
+
+        <div class="status" id="status">Listo para cargar capturas o compartir pantalla.</div>
+      </div>
+
+      <div class="card">
+        <div class="title">
+          <div class="icon">✓</div>
+          <div>
+            <h2>Modo recomendado</h2>
+            <p class="muted">El flujo más rápido para calle</p>
+          </div>
+        </div>
+        <div class="tips">
+          <div class="tip">1. Comparte la ventana donde salen tus direcciones.</div>
+          <div class="tip">2. Usa “Leer pantalla actual” o “Capturar frame”.</div>
+          <div class="tip">3. Corrige direcciones mal detectadas.</div>
+          <div class="tip">4. Ubica, optimiza y abre bloques en Maps.</div>
+          <div class="tip warn">Consejo: comparte solo la ventana del reparto para que el OCR se ensucie menos.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabbar">
+      <button class="tabbtn active" data-tab="screen">Pantalla</button>
+      <button class="tabbtn" data-tab="images">Imágenes</button>
+      <button class="tabbtn" data-tab="addresses">Direcciones</button>
+      <button class="tabbtn" data-tab="route">Ruta</button>
+    </div>
+
+    <section class="tabpanel active" id="tab-screen">
+      <div class="grid grid-main">
+        <div class="card">
+          <div class="title">
+            <div class="icon">🖥</div>
+            <div>
+              <h2>Captura de pantalla</h2>
+              <p class="muted">Comparte ventana o pantalla y detecta direcciones desde ahí</p>
+            </div>
+          </div>
+          <div class="row">
+            <button class="btn-primary" id="btnShareScreen">Compartir pantalla</button>
+            <button class="btn-danger hidden" id="btnStopScreen">Detener pantalla</button>
+            <button class="btn-secondary" id="btnCaptureFrame">Capturar frame</button>
+            <button class="btn-secondary" id="btnDetectScreen">Leer pantalla actual</button>
+          </div>
+          <div class="row section">
+            <button class="btn-secondary" id="btnStartRec">Grabar pantalla</button>
+            <button class="btn-danger hidden" id="btnStopRec">Detener grabación</button>
+            <span class="muted">Auto captura cada</span>
+            <input id="captureSeconds" type="number" min="1" max="30" value="3" style="width:90px;" />
+            <span class="muted">seg</span>
+            <button class="btn-secondary" id="btnToggleAuto">Iniciar auto captura</button>
+          </div>
+          <div class="video-box section">
+            <video id="screenVideo" autoplay playsinline muted></video>
+          </div>
+          <div class="section hidden" id="recordingBox">
+            <a class="btn-link" id="downloadRecording" download="captura-ruta.webm">Descargar grabación</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="title">
+            <div class="icon">⚡</div>
+            <div>
+              <h2>Uso rápido</h2>
+              <p class="muted">Para no perder tiempo entre una entrega y otra</p>
+            </div>
+          </div>
+          <div class="tips">
+            <div class="tip">Abre la app o pantalla donde ves las direcciones.</div>
+            <div class="tip">Pulsa compartir pantalla y elige esa ventana.</div>
+            <div class="tip">Pulsa leer pantalla actual cuando veas varias direcciones.</div>
+            <div class="tip">Después corrige, optimiza y abre bloque 1 en Maps.</div>
+            <div class="tip">Cuando termines ese bloque, abre el siguiente.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tabpanel" id="tab-images">
+      <div class="grid grid-main">
+        <div class="card">
+          <div class="title">
+            <div class="icon">🖼</div>
+            <div>
+              <h2>Capturas e imágenes</h2>
+              <p class="muted">Sube, pega o agrega frames desde pantalla</p>
+            </div>
+          </div>
+          <input id="fileInput" type="file" accept="image/*" multiple class="hidden" />
+          <div class="drop" id="dropZone" tabindex="0">
+            <p><strong>Sube imágenes o pega capturas con Ctrl + V</strong></p>
+            <p class="muted">También se agregan aquí los frames capturados desde la pestaña Pantalla</p>
+            <div class="row" style="justify-content:center; margin-top:12px;">
+              <button type="button" class="btn-primary" id="btnPickImages">Seleccionar capturas</button>
+              <button type="button" class="btn-secondary" id="btnRunOcr">Leer capturas</button>
+            </div>
+          </div>
+          <div class="preview-grid" id="previewGrid"></div>
+        </div>
+
+        <div class="card">
+          <div class="title">
+            <div class="icon">TXT</div>
+            <div>
+              <h2>Texto detectado</h2>
+              <p class="muted">Aquí se acumula el texto del OCR</p>
+            </div>
+          </div>
+          <textarea id="rawText" placeholder="Aquí aparecerá el texto detectado..."></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="tabpanel" id="tab-addresses">
+      <div class="grid grid-main">
+        <div class="card">
+          <div class="title">
+            <div class="icon">DIR</div>
+            <div>
+              <h2>Editor de direcciones</h2>
+              <p class="muted">Una dirección por línea</p>
+            </div>
+          </div>
+          <textarea id="manualText" placeholder="Una dirección por línea"></textarea>
+          <div class="row section">
+            <button class="btn-primary" id="btnSyncList">Actualizar lista</button>
+            <button class="btn-secondary" id="btnAddStop">Agregar parada</button>
+            <button class="btn-secondary" id="btnCopyList">Copiar lista</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row space">
+            <div>
+              <h2 style="margin:0;">Paradas detectadas</h2>
+              <p class="muted">Corrige antes de geocodificar</p>
+            </div>
+            <div class="row">
+              <button class="btn-secondary" id="btnGeocode">Ubicar todas</button>
+              <button class="btn-primary" id="btnOptimize">Optimizar orden</button>
+            </div>
+          </div>
+          <div class="list section" id="stopsList"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tabpanel" id="tab-route">
+      <div class="grid grid-main">
+        <div class="card">
+          <div class="title">
+            <div class="icon">R</div>
+            <div>
+              <h2>Resumen operativo</h2>
+              <p class="muted">Exporta y abre rutas</p>
+            </div>
+          </div>
+          <div class="tips">
+            <div class="tip" id="routeSummary">Todavía no hay suficientes direcciones procesadas.</div>
+            <div class="tip">Recomendación: usa bloques de 8 o 9 paradas para Google Maps.</div>
+          </div>
+          <div class="row section">
+            <button class="btn-primary" id="btnExportCsv">Exportar CSV</button>
+            <button class="btn-secondary" id="btnReoptimize">Reoptimizar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="title">
+            <div class="icon">MAP</div>
+            <div>
+              <h2>Bloques para Google Maps</h2>
+              <p class="muted">Ábrelos uno por uno</p>
+            </div>
+          </div>
+          <div id="routeBlocks"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const state = {
+      images: [],
+      stops: [],
+      startPoint: null,
+      screenStream: null,
+      recorder: null,
+      recordingUrl: '',
+      autoCaptureTimer: null,
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $('status');
+    const progressWrap = $('progressWrap');
+    const progressLabel = $('progressLabel');
+    const progressBar = $('progressBar');
+    const screenVideo = $('screenVideo');
+
+    function uid() {
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    }
+
+    const normalize = (value) =>
+      (value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const cleanAddress = (text) =>
+      (text || '')
+        .replace(/[|]+/g, ' ')
+        .replace(/[•·]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/,+/g, ',')
+        .trim();
+
+    
+const STREET_HINTS = [
+  'calle', 'av', 'avenida', 'blvd', 'boulevard', 'privada', 'prol', 'prolongacion',
+  'circuito', 'camino', 'carretera', 'fracc', 'fraccionamiento', 'col', 'colonia',
+  'eje', 'torre', 'cerrada', 'andador', 'retorno', 'mision', 'san ', 'villa ',
+  'lote', 'manzana', 'int', 'interior', 'ext', 'numero', 'no', 'cp', 'c.p', 'slp',
+  'san luis potosi', 'mexico'
+];
+
+const LOCALITY_HINTS = [
+  'san luis potosi', 's.l.p', 'slp', 'pozos', 'villa de pozos', 'mision del palmar',
+  'los silos', 'fraccionamiento', 'residencial', 'colonia', 'villas', 'privadas'
+];
+
+const IGNORE_PATTERNS = [
+  /\bmercado libre\b/i,
+  /\bestoy llegando\b/i,
+  /\bentrega\b/i,
+  /\betiqueta\b/i,
+  /\bhorario comercial\b/i,
+  /\bpedido\b/i,
+  /\bcliente\b/i,
+  /\btelefono\b/i,
+  /\bobservaciones\b/i,
+  /\bnotas\b/i,
+  /\bzona\b/i,
+  /\bcobro\b/i,
+  /\bpaquete\b/i,
+  /\bunidad\b/i,
+  /\bhs\b/i,
+  /\b\d{1,2}:\d{2}\b/,
+];
+
+function hasStreetHint(text) {
+  return STREET_HINTS.some((hint) => text.includes(hint));
+}
+
+function hasHouseNumber(text) {
+  return /\b\d+[a-zA-Z-]*\b|\b[a-zA-Z-]*\d+[a-zA-Z-]*\b/.test(text);
+}
+
+function hasZipCode(text) {
+  return /(^|\D)\d{5}(\D|$)/.test(text);
+}
+
+function hasLocalityHint(text) {
+  return LOCALITY_HINTS.some((hint) => text.includes(hint));
+}
+
+function looksLikeLocalityOnly(text) {
+  return hasLocalityHint(text) && !hasStreetHint(text) && !hasHouseNumber(text);
+}
+
+function isNoiseLine(text) {
+  if (!text || text.length < 6) return true;
+  if (IGNORE_PATTERNS.some((pattern) => pattern.test(text))) return true;
+  if (/^[\[\](){}.,\-–—_:;]+$/.test(text)) return true;
+  if (/^\d+[.)-]?\s*$/.test(text)) return true;
+  return false;
+}
+
+function isGenericFragment(text) {
+  const norm = normalize(text);
+  const words = norm.split(' ').filter(Boolean);
+  if (/^(casa|domicilio|frente|atras|atrás|junto)\b/.test(norm) && !hasStreetHint(norm) && !hasZipCode(norm)) return true;
+  if (words.length <= 2 && !hasStreetHint(norm) && !hasZipCode(norm)) return true;
+  return false;
+}
+
+function addressScore(value) {
+  const text = normalize(value);
+  let score = 0;
+  if (hasStreetHint(text)) score += 2;
+  if (hasHouseNumber(text)) score += 2;
+  if (hasZipCode(text)) score += 2;
+  if (hasLocalityHint(text)) score += 1;
+  if ((text.match(/,/g) || []).length >= 1) score += 1;
+  if (/\b[a-zA-Záéíóúñ]{4,}\s+\d+[a-zA-Z-]*\b/i.test(value)) score += 1;
+  if (/\b(calle|avenida|av\.?|prol\.?|privada|eje|torre)\b/i.test(value)) score += 1;
+  if (isGenericFragment(text)) score -= 3;
+  if (isNoiseLine(text)) score -= 4;
+  return score;
+}
+
+
+function likelyAddress(line) {
+  return addressScore(line) >= 3;
+}
+
+function extractAddressCandidates(raw) {
+  const lines = (raw || '')
+    .split(/\n+/)
+    .map((line) => cleanAddress(line))
+    .filter(Boolean)
+    .filter((line) => !isNoiseLine(normalize(line)));
+
+  const candidates = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const current = lines[i];
+    const currentNorm = normalize(current);
+    const next = lines[i + 1] || '';
+    const nextNorm = normalize(next);
+
+    if (isNoiseLine(currentNorm)) continue;
+
+    let candidate = current;
+    const currentPartial = (
+      (hasStreetHint(currentNorm) && !hasHouseNumber(currentNorm) && !hasZipCode(currentNorm)) ||
+      /[,\-]$/.test(current) ||
+      (current.length < 24 && hasStreetHint(currentNorm)) ||
+      (hasHouseNumber(currentNorm) && !hasLocalityHint(currentNorm) && next && looksLikeLocalityOnly(nextNorm))
+    );
+
+    if (currentPartial && next && !isNoiseLine(nextNorm)) {
+      if (looksLikeLocalityOnly(nextNorm) || (hasZipCode(nextNorm) && !hasStreetHint(nextNorm))) {
+        candidate = cleanAddress(`${current}, ${next}`);
+        i += 1;
+      }
+    }
+
+    if (!likelyAddress(candidate)) {
+      if (hasHouseNumber(currentNorm) && currentNorm.split(' ').length >= 3 && !isGenericFragment(currentNorm)) {
+        candidate = current;
+      } else {
+        continue;
+      }
+    }
+
+    if (isGenericFragment(normalize(candidate)) && !hasZipCode(normalize(candidate)) && !hasStreetHint(normalize(candidate))) {
+      continue;
+    }
+
+    candidates.push(candidate);
+  }
+
+  const unique = [];
+  const seen = new Set();
+  for (const item of candidates) {
+    const key = normalize(item);
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(item);
+    }
+  }
+  return unique.slice(0, 500);
+}
+
+function mergeAddresses(addresses, source = 'ocr') {
+      const seen = new Set(state.stops.map((s) => normalize(s.address)));
+      let added = 0;
+      addresses.forEach((address) => {
+        const cleaned = cleanAddress(address);
+        const key = normalize(cleaned);
+        if (!cleaned || seen.has(key)) return;
+        seen.add(key);
+        state.stops.push({
+          id: uid(),
+          address: cleaned,
+          source,
+          lat: null,
+          lng: null,
+          normalizedLabel: '',
+          geocodeStatus: 'pendiente',
+        });
+        added += 1;
+      });
+      syncManualTextFromStops();
+      renderStops();
+      renderRouteBlocks();
+      return added;
+    }
+
+    function syncManualTextFromStops() {
+      $('manualText').value = state.stops.map((s) => s.address).join('\n');
+    }
+
+    function updateStats() {
+      const resolved = state.stops.filter((s) => s.lat && s.lng).length;
+      $('statStops').textContent = state.stops.length;
+      $('statResolved').textContent = resolved;
+      $('statUnresolved').textContent = state.stops.length - resolved;
+      $('statBlocks').textContent = buildRouteBatches().length;
+      $('routeSummary').textContent = state.stops.length
+        ? (state.stops.length - resolved > 0
+            ? `Hay ${state.stops.length - resolved} direcciones pendientes de ubicar. Corrígelas antes de salir.`
+            : 'Todas las direcciones tienen coordenadas. Ya puedes abrir la ruta por bloques.')
+        : 'Todavía no hay suficientes direcciones procesadas.';
+    }
+
+    function renderPreviews() {
+      const grid = $('previewGrid');
+      grid.innerHTML = '';
+      state.images.forEach((image) => {
+        const div = document.createElement('div');
+        div.className = 'preview';
+        div.innerHTML = `
+          <img src="${image.url}" alt="${image.name}" />
+          <div class="meta">
+            <div>
+              <div class="small"><strong>${image.name}</strong></div>
+              <div class="small muted">${image.source}</div>
+            </div>
+            <button class="btn-danger small" data-remove-image="${image.id}">Quitar</button>
+          </div>
+        `;
+        grid.appendChild(div);
+      });
+
+      grid.querySelectorAll('[data-remove-image]').forEach((btn) => {
+        btn.onclick = () => {
+          const id = btn.getAttribute('data-remove-image');
+          const image = state.images.find((x) => x.id === id);
+          if (image && image.url.startsWith('blob:')) URL.revokeObjectURL(image.url);
+          state.images = state.images.filter((x) => x.id !== id);
+          renderPreviews();
+        };
+      });
+    }
+
+    function renderStops() {
+      const list = $('stopsList');
+      list.innerHTML = '';
+      state.stops.forEach((stop, index) => {
+        const div = document.createElement('div');
+        div.className = 'stop';
+        div.innerHTML = `
+          <div class="stop-head">
+            <div class="index">${index + 1}</div>
+            <div>
+              <input data-stop-input="${stop.id}" value="${escapeHtml(stop.address)}" />
+              <div class="row" style="margin-top:8px;">
+                <span class="badge">${stop.source}</span>
+                <span class="badge">${stop.geocodeStatus === 'ok' ? 'ubicada' : stop.geocodeStatus}</span>
+                ${stop.normalizedLabel ? `<span class="badge">${escapeHtml(stop.normalizedLabel)}</span>` : ''}
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn-secondary small" data-up="${stop.id}">↑</button>
+              <button class="btn-secondary small" data-down="${stop.id}">↓</button>
+              <button class="btn-danger small" data-delete="${stop.id}">✕</button>
+            </div>
+          </div>
+        `;
+        list.appendChild(div);
+      });
+
+      list.querySelectorAll('[data-stop-input]').forEach((input) => {
+        input.onchange = () => {
+          const stop = state.stops.find((s) => s.id === input.getAttribute('data-stop-input'));
+          if (!stop) return;
+          stop.address = cleanAddress(input.value);
+          stop.lat = null;
+          stop.lng = null;
+          stop.normalizedLabel = '';
+          stop.geocodeStatus = 'pendiente';
+          syncManualTextFromStops();
+          updateStats();
+          renderStops();
+        };
+      });
+
+      list.querySelectorAll('[data-delete]').forEach((btn) => {
+        btn.onclick = () => {
+          const id = btn.getAttribute('data-delete');
+          state.stops = state.stops.filter((s) => s.id !== id);
+          syncManualTextFromStops();
+          renderStops();
+          renderRouteBlocks();
+        };
+      });
+
+      list.querySelectorAll('[data-up]').forEach((btn) => {
+        btn.onclick = () => moveStop(btn.getAttribute('data-up'), -1);
+      });
+      list.querySelectorAll('[data-down]').forEach((btn) => {
+        btn.onclick = () => moveStop(btn.getAttribute('data-down'), 1);
+      });
+      updateStats();
+    }
+
+    function moveStop(id, delta) {
+      const idx = state.stops.findIndex((s) => s.id === id);
+      const next = idx + delta;
+      if (idx < 0 || next < 0 || next >= state.stops.length) return;
+      [state.stops[idx], state.stops[next]] = [state.stops[next], state.stops[idx]];
+      syncManualTextFromStops();
+      renderStops();
+      renderRouteBlocks();
+    }
+
+    function splitIntoBatches(items, batchSize) {
+      const out = [];
+      for (let i = 0; i < items.length; i += batchSize) out.push(items.slice(i, i + batchSize));
+      return out;
+    }
+
+    function buildGoogleMapsDirectionsUrl(batch, origin) {
+      if (!batch.length) return '#';
+      const destination = batch[batch.length - 1].address;
+      const waypoints = batch.slice(0, -1).map((stop) => stop.address).join('|');
+      const params = new URLSearchParams({ api: '1', travelmode: 'driving', destination });
+      if (origin && origin.trim()) params.set('origin', origin.trim());
+      if (waypoints) params.set('waypoints', waypoints);
+      return `https://www.google.com/maps/dir/?${params.toString()}`;
+    }
+
+    function buildRouteBatches() {
+      const batchSize = Math.max(1, Number($('batchSize').value || 9));
+      return splitIntoBatches(state.stops.filter((s) => s.address.trim()), batchSize).map((batch) => ({
+        id: uid(),
+        batch,
+        url: buildGoogleMapsDirectionsUrl(batch, $('startAddress').value || ''),
+      }));
+    }
+
+    function renderRouteBlocks() {
+      const holder = $('routeBlocks');
+      holder.innerHTML = '';
+      const blocks = buildRouteBatches();
+      blocks.forEach((block, idx) => {
+        const div = document.createElement('div');
+        div.className = 'route-block';
+        div.innerHTML = `
+          <div class="row space">
+            <div>
+              <strong>Bloque ${idx + 1}</strong>
+              <div class="muted">${block.batch.length} parada(s)</div>
+            </div>
+            <a class="btn-link" href="${block.url}" target="_blank" rel="noreferrer">Abrir ruta</a>
+          </div>
+          <div class="section">
+            ${block.batch.map((stop, i) => `<div class="route-stop">${i + 1}. ${escapeHtml(stop.address)}</div>`).join('')}
+          </div>
+        `;
+        holder.appendChild(div);
+      });
+      updateStats();
+    }
+
+    async function geocodeNominatim(query) {
+      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=mx&q=${encodeURIComponent(query)}`;
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error('No se pudo consultar el geocodificador');
+      const data = await res.json();
+      if (!data.length) return null;
+      return {
+        lat: Number(data[0].lat),
+        lng: Number(data[0].lon),
+        label: data[0].display_name,
+      };
+    }
+
+    function haversineKm(a, b) {
+      const toRad = (deg) => (deg * Math.PI) / 180;
+      const R = 6371;
+      const dLat = toRad(b.lat - a.lat);
+      const dLng = toRad(b.lng - a.lng);
+      const x =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    }
+
+    function optimizeNearestNeighbor(stops, startPoint) {
+      const pending = stops.filter((stop) => stop.lat && stop.lng && stop.address.trim());
+      const unresolved = stops.filter((stop) => !stop.lat || !stop.lng);
+      if (!pending.length) return stops;
+      const route = [];
+      let current = startPoint && startPoint.lat && startPoint.lng ? startPoint : pending[0];
+      const pool = [...pending];
+      while (pool.length) {
+        let bestIndex = 0;
+        let bestDistance = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < pool.length; i += 1) {
+          const d = haversineKm(current, pool[i]);
+          if (d < bestDistance) {
+            bestDistance = d;
+            bestIndex = i;
+          }
+        }
+        const [next] = pool.splice(bestIndex, 1);
+        route.push(next);
+        current = next;
+      }
+      return [...route, ...unresolved];
+    }
+
+    function csvEscape(value) {
+      const text = String(value ?? '');
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    function exportCsv() {
+      const header = ['orden', 'direccion', 'estado', 'lat', 'lng', 'coincidencia'];
+      const rows = state.stops.map((stop, index) => [
+        index + 1,
+        stop.address,
+        stop.geocodeStatus,
+        stop.lat ?? '',
+        stop.lng ?? '',
+        stop.normalizedLabel ?? '',
+      ]);
+      const csv = [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'ruta-optimizada-ml.csv';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function addFiles(files, source = 'upload') {
+      files.forEach((file) => {
+        state.images.push({
+          id: uid(),
+          file,
+          name: file.name,
+          source,
+          url: URL.createObjectURL(file),
+        });
+      });
+      renderPreviews();
+      setStatus(`${files.length} imagen(es) agregadas.`);
+    }
+
+    
+async function loadImageElement(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('No se pudo leer la imagen.'));
+    };
+    img.src = url;
+  });
+}
+
+async function createCardSliceFiles(file) {
+  const img = await loadImageElement(file);
+  if (!(img.height > img.width * 1.2 && img.width <= 900)) return [];
+
+  const estimated = Math.min(14, Math.max(6, Math.round(img.height / 95)));
+  const sliceHeight = Math.max(72, Math.round(img.height / estimated));
+  const step = Math.max(56, Math.round(sliceHeight * 0.82));
+  const files = [];
+
+  for (let y = 0; y < img.height - 30; y += step) {
+    const canvas = document.createElement('canvas');
+    const cropHeight = Math.min(sliceHeight, img.height - y);
+    canvas.width = img.width * 1.5;
+    canvas.height = cropHeight * 1.5;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(1.5, 1.5);
+    ctx.drawImage(img, 0, y, img.width, cropHeight, 0, 0, img.width, cropHeight);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) continue;
+    files.push(new File([blob], `slice-${uid()}.png`, { type: 'image/png' }));
+  }
+  return files;
+}
+
+async function runOcrOnFile(file) {
+  const result = await Tesseract.recognize(file, 'spa+eng');
+  return result.data.text || '';
+}
+
+async function analyzeImageFile(file) {
+  const texts = [];
+  const wholeText = await runOcrOnFile(file);
+  texts.push(wholeText);
+
+  const sliceFiles = await createCardSliceFiles(file);
+  for (let i = 0; i < sliceFiles.length; i += 1) {
+    const sliceText = await runOcrOnFile(sliceFiles[i]);
+    if (sliceText && sliceText.trim()) texts.push(sliceText);
+  }
+
+  const joined = texts.join('\n').trim();
+  return {
+    text: joined,
+    candidates: extractAddressCandidates(joined),
+  };
+}
+
+async function runOcrForAllImages() {
+  if (!state.images.length) {
+    setStatus('Primero agrega imágenes o captura frames.');
+    return;
+  }
+  try {
+    setProgress('Leyendo capturas con OCR...', 5);
+    let combinedText = $('rawText').value ? $('rawText').value + '\n' : '';
+    let allCandidates = [];
+    for (let i = 0; i < state.images.length; i += 1) {
+      const image = state.images[i];
+      const analysis = await analyzeImageFile(image.file);
+      combinedText += `${analysis.text}\n`;
+      allCandidates = allCandidates.concat(analysis.candidates);
+      setProgress('Leyendo capturas con OCR...', Math.round(((i + 1) / state.images.length) * 100));
+    }
+    $('rawText').value = combinedText.trim();
+    const added = mergeAddresses(allCandidates, 'ocr');
+    setStatus(`OCR terminado. Se agregaron ${added} dirección(es) nuevas.`);
+  } catch (error) {
+    setStatus(`Error leyendo capturas: ${error.message}`);
+  } finally {
+    clearProgress();
+  }
+}
+
+async function shareScreen() {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: { ideal: 10, max: 15 } },
+          audio: false,
+        });
+        state.screenStream = stream;
+        screenVideo.srcObject = stream;
+        $('btnShareScreen').classList.add('hidden');
+        $('btnStopScreen').classList.remove('hidden');
+        stream.getVideoTracks()[0].onended = stopScreen;
+        setStatus('Pantalla compartida. Ya puedes capturar frames o leer la pantalla actual.');
+      } catch (error) {
+        setStatus(`No se pudo compartir pantalla: ${error.message}`);
+      }
+    }
+
+    function stopScreen() {
+      if (state.autoCaptureTimer) {
+        clearInterval(state.autoCaptureTimer);
+        state.autoCaptureTimer = null;
+        $('btnToggleAuto').textContent = 'Iniciar auto captura';
+      }
+      if (state.recorder && state.recorder.state !== 'inactive') {
+        state.recorder.stop();
+      }
+      if (state.screenStream) {
+        state.screenStream.getTracks().forEach((track) => track.stop());
+      }
+      state.screenStream = null;
+      screenVideo.srcObject = null;
+      $('btnShareScreen').classList.remove('hidden');
+      $('btnStopScreen').classList.add('hidden');
+      $('btnStartRec').classList.remove('hidden');
+      $('btnStopRec').classList.add('hidden');
+      setStatus('Captura de pantalla detenida.');
+    }
+
+    function captureCurrentFrameBlob() {
+      return new Promise((resolve, reject) => {
+        if (!screenVideo.videoWidth || !screenVideo.videoHeight) {
+          reject(new Error('La vista de pantalla aún no está lista.'));
+          return;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = screenVideo.videoWidth;
+        canvas.height = screenVideo.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('No se pudo generar imagen del frame.'));
+            return;
+          }
+          resolve(blob);
+        }, 'image/png');
+      });
+    }
+
+    async function captureFrameToImages(announce = true) {
+      try {
+        const blob = await captureCurrentFrameBlob();
+        const file = new File([blob], `screen-${uid()}.png`, { type: 'image/png' });
+        addFiles([file], 'screen');
+        if (announce) setStatus('Frame capturado desde pantalla.');
+      } catch (error) {
+        setStatus(error.message);
+      }
+    }
+
+    
+async function detectCurrentScreen() {
+  try {
+    setProgress('Leyendo pantalla actual...', 15);
+    const blob = await captureCurrentFrameBlob();
+    const file = new File([blob], `screen-ocr-${uid()}.png`, { type: 'image/png' });
+    setProgress('Leyendo pantalla actual...', 55);
+    const analysis = await analyzeImageFile(file);
+    $('rawText').value = `${$('rawText').value}\n${analysis.text}`.trim();
+    const added = mergeAddresses(analysis.candidates, 'screen-ocr');
+    setStatus(`Pantalla analizada. Se agregaron ${added} dirección(es) nuevas.`);
+  } catch (error) {
+    setStatus(`No se pudo leer la pantalla: ${error.message}`);
+  } finally {
+    clearProgress();
+  }
+}
+
+function startRecording() {
+      if (!state.screenStream) {
+        setStatus('Primero comparte pantalla.');
+        return;
+      }
+      try {
+        const chunks = [];
+        if (state.recordingUrl) URL.revokeObjectURL(state.recordingUrl);
+        state.recorder = new MediaRecorder(state.screenStream, { mimeType: 'video/webm' });
+        state.recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) chunks.push(event.data);
+        };
+        state.recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: 'video/webm' });
+          state.recordingUrl = URL.createObjectURL(blob);
+          $('downloadRecording').href = state.recordingUrl;
+          $('recordingBox').classList.remove('hidden');
+          $('btnStartRec').classList.remove('hidden');
+          $('btnStopRec').classList.add('hidden');
+          setStatus('Grabación lista para descargar.');
+        };
+        state.recorder.start(1000);
+        $('btnStartRec').classList.add('hidden');
+        $('btnStopRec').classList.remove('hidden');
+        setStatus('Grabación iniciada.');
+      } catch (error) {
+        setStatus(`No se pudo iniciar la grabación: ${error.message}`);
+      }
+    }
+
+    function stopRecording() {
+      if (state.recorder && state.recorder.state !== 'inactive') state.recorder.stop();
+    }
+
+    function toggleAutoCapture() {
+      if (!state.screenStream) {
+        setStatus('Primero comparte pantalla.');
+        return;
+      }
+      if (state.autoCaptureTimer) {
+        clearInterval(state.autoCaptureTimer);
+        state.autoCaptureTimer = null;
+        $('btnToggleAuto').textContent = 'Iniciar auto captura';
+        setStatus('Auto captura detenida.');
+        return;
+      }
+      const seconds = Math.max(1, Number($('captureSeconds').value || 3));
+      state.autoCaptureTimer = setInterval(() => captureFrameToImages(false), seconds * 1000);
+      $('btnToggleAuto').textContent = 'Detener auto captura';
+      setStatus(`Auto captura iniciada cada ${seconds} segundo(s).`);
+    }
+
+    async function geocodeAll() {
+      if (!state.stops.length) {
+        setStatus('No hay direcciones para geocodificar.');
+        return;
+      }
+      try {
+        setProgress('Ubicando direcciones...', 3);
+        if ($('startAddress').value.trim()) {
+          state.startPoint = await geocodeNominatim($('startAddress').value.trim());
+        }
+        for (let i = 0; i < state.stops.length; i += 1) {
+          const stop = state.stops[i];
+          if (!stop.address.trim()) continue;
+          try {
+            stop.geocodeStatus = 'buscando';
+            renderStops();
+            const hit = await geocodeNominatim(`${stop.address}, San Luis Potosí, Mexico`);
+            if (hit) {
+              stop.lat = hit.lat;
+              stop.lng = hit.lng;
+              stop.normalizedLabel = hit.label;
+              stop.geocodeStatus = 'ok';
+            } else {
+              stop.geocodeStatus = 'sin coincidencia';
+            }
+          } catch {
+            stop.geocodeStatus = 'error';
+          }
+          renderStops();
+          setProgress('Ubicando direcciones...', Math.round(((i + 1) / state.stops.length) * 100));
+          await new Promise((resolve) => setTimeout(resolve, 900));
+        }
+        setStatus('Geocodificación terminada.');
+      } catch (error) {
+        setStatus(`Error geocodificando: ${error.message}`);
+      } finally {
+        clearProgress();
+        renderRouteBlocks();
+      }
+    }
+
+    function optimizeRoute() {
+      if (!state.stops.length) {
+        setStatus('No hay paradas para optimizar.');
+        return;
+      }
+      state.stops = optimizeNearestNeighbor(state.stops, state.startPoint);
+      syncManualTextFromStops();
+      renderStops();
+      renderRouteBlocks();
+      setStatus('Ruta reordenada con heurística de vecino más cercano.');
+    }
+
+    function syncStopsFromManual() {
+      const seen = new Set();
+      state.stops = $('manualText').value
+        .split(/\n+/)
+        .map((line) => cleanAddress(line))
+        .filter(Boolean)
+        .filter((line) => {
+          const key = normalize(line);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((address) => ({
+          id: uid(),
+          address,
+          source: 'manual',
+          lat: null,
+          lng: null,
+          normalizedLabel: '',
+          geocodeStatus: 'pendiente',
+        }));
+      renderStops();
+      renderRouteBlocks();
+      setStatus(`Lista actualizada con ${state.stops.length} parada(s).`);
+    }
+
+    function addStop() {
+      state.stops.push({
+        id: uid(),
+        address: '',
+        source: 'manual',
+        lat: null,
+        lng: null,
+        normalizedLabel: '',
+        geocodeStatus: 'pendiente',
+      });
+      syncManualTextFromStops();
+      renderStops();
+    }
+
+    async function copyList() {
+      const text = state.stops.map((s, idx) => `${idx + 1}. ${s.address}`).join('\n');
+      await navigator.clipboard.writeText(text);
+      setStatus('Lista copiada al portapapeles.');
+    }
+
+    function initTabs() {
+      document.querySelectorAll('.tabbtn').forEach((btn) => {
+        btn.onclick = () => {
+          document.querySelectorAll('.tabbtn').forEach((x) => x.classList.remove('active'));
+          document.querySelectorAll('.tabpanel').forEach((x) => x.classList.remove('active'));
+          btn.classList.add('active');
+          document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+        };
+      });
+    }
+
+    function initUploadZone() {
+      $('btnPickImages').onclick = () => $('fileInput').click();
+      $('fileInput').onchange = (e) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length) addFiles(files, 'upload');
+        e.target.value = '';
+      };
+
+      const drop = $('dropZone');
+      drop.addEventListener('paste', (event) => {
+        const items = Array.from(event.clipboardData?.items || []);
+        const files = items
+          .filter((item) => item.type.startsWith('image/'))
+          .map((item) => item.getAsFile())
+          .filter(Boolean);
+        if (!files.length) return;
+        event.preventDefault();
+        addFiles(files, 'paste');
+      });
+      drop.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        drop.style.borderColor = '#2563eb';
+      });
+      drop.addEventListener('dragleave', () => {
+        drop.style.borderColor = 'var(--line)';
+      });
+      drop.addEventListener('drop', (e) => {
+        e.preventDefault();
+        drop.style.borderColor = 'var(--line)';
+        const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'));
+        if (files.length) addFiles(files, 'drop');
+      });
+    }
+
+    function bindActions() {
+      $('btnRunOcr').onclick = runOcrForAllImages;
+      $('btnShareScreen').onclick = shareScreen;
+      $('btnStopScreen').onclick = stopScreen;
+      $('btnCaptureFrame').onclick = () => captureFrameToImages(true);
+      $('btnDetectScreen').onclick = detectCurrentScreen;
+      $('btnStartRec').onclick = startRecording;
+      $('btnStopRec').onclick = stopRecording;
+      $('btnToggleAuto').onclick = toggleAutoCapture;
+      $('btnGeocode').onclick = geocodeAll;
+      $('btnOptimize').onclick = optimizeRoute;
+      $('btnReoptimize').onclick = optimizeRoute;
+      $('btnSyncList').onclick = syncStopsFromManual;
+      $('btnAddStop').onclick = addStop;
+      $('btnCopyList').onclick = copyList;
+      $('btnExportCsv').onclick = exportCsv;
+      $('startAddress').onchange = renderRouteBlocks;
+      $('batchSize').onchange = renderRouteBlocks;
+    }
+
+    initTabs();
+    initUploadZone();
+    bindActions();
+    renderPreviews();
+    renderStops();
+    renderRouteBlocks();
+  </script>
+</body>
+</html>
