@@ -895,25 +895,239 @@
       return result.data.text || '';
     }
 
+    async function loadImageElement(file) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(img);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('No se pudo leer la imagen.'));
+        };
+        img.src = url;
+      });
+    }
+
+    function buildCanvasFromImage(img, maxWidth = 900) {
+      const scale = Math.min(1, maxWidth / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return canvas;
+    }
+
+    function detectGreenMarkers(canvas) {
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const { width, height } = canvas;
+      const data = ctx.getImageData(0, 0, width, height).data;
+      const markers = [];
+      const leftLimit = Math.floor(width * 0.22);
+      const minW = Math.max(8, Math.round(width * 0.012));
+      const maxW = Math.max(40, Math.round(width * 0.07));
+      const minH = minW;
+      const maxH = maxW * 1.5;
+      const stride = 2;
+      const visited = new Uint8Array(width * height);
+
+      function isGreen(offset) {
+        const r = data[offset];
+        const g = data[offset + 1];
+        const b = data[offset + 2];
+        return g >= 85 && g > r + 18 && g > b + 10 && !(r > 170 && g > 170 && b > 170);
+      }
+
+      for (let y = 0; y < height; y += stride) {
+        for (let x = 0; x < leftLimit; x += stride) {
+          const idx = y * width + x;
+          if (visited[idx]) continue;
+          visited[idx] = 1;
+          const offset = idx * 4;
+          if (!isGreen(offset)) continue;
+
+          const queue = [[x, y]];
+          let qIndex = 0;
+          let minX = x, maxX = x, minY = y, maxY = y, count = 0;
+
+          while (qIndex < queue.length) {
+            const [cx, cy] = queue[qIndex++];
+            count += 1;
+            if (cx < minX) minX = cx;
+            if (cx > maxX) maxX = cx;
+            if (cy < minY) minY = cy;
+            if (cy > maxY) maxY = cy;
+
+            const neighbors = [[cx + stride, cy], [cx - stride, cy], [cx, cy + stride], [cx, cy - stride]];
+            for (const [nx, ny] of neighbors) {
+              if (nx < 0 || ny < 0 || nx >= leftLimit || ny >= height) continue;
+              const nIdx = ny * width + nx;
+              if (visited[nIdx]) continue;
+              visited[nIdx] = 1;
+              const no = nIdx * 4;
+              if (isGreen(no)) queue.push([nx, ny]);
+            }
+          }
+
+          const boxW = maxX - minX + stride;
+          const boxH = maxY - minY + stride;
+          const aspect = boxW / Math.max(1, boxH);
+          if (count < 16 || boxW < minW || boxH < minH || boxW > maxW || boxH > maxH) continue;
+          if (aspect < 0.55 || aspect > 1.8) continue;
+          if (minX > width * 0.12) continue;
+          markers.push({ x: minX, y: minY, w: boxW, h: boxH, pixels: count });
+        }
+      }
+
+      markers.sort((a, b) => a.y - b.y || a.x - b.x);
+      const deduped = [];
+      for (const marker of markers) {
+        const prev = deduped[deduped.length - 1];
+        if (prev && Math.abs(prev.y - marker.y) < Math.max(prev.h, marker.h) * 0.7) {
+          if (marker.pixels > prev.pixels) deduped[deduped.length - 1] = marker;
+          continue;
+        }
+        deduped.push(marker);
+      }
+      return deduped;
+    }
+
+    function preprocessCanvasForOCR(sourceCanvas) {
+      const canvas = document.createElement('canvas');
+      canvas.width = sourceCanvas.width;
+      canvas.height = sourceCanvas.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(sourceCanvas, 0, 0);
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = image.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const gray = Math.round(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114);
+        const boosted = gray > 188 ? 255 : gray < 92 ? 0 : gray;
+        d[i] = boosted;
+        d[i + 1] = boosted;
+        d[i + 2] = boosted;
+      }
+      ctx.putImageData(image, 0, 0);
+      return canvas;
+    }
+
+    async function canvasToFile(canvas, name) {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      if (!blob) throw new Error('No se pudo generar recorte para OCR.');
+      return new File([blob], name, { type: 'image/png' });
+    }
+
+    function buildStopCropCanvases(canvas, markers) {
+      const crops = [];
+      const rightEdge = Math.round(canvas.width * 0.985);
+      markers.forEach((marker, index) => {
+        const nextMarker = markers[index + 1];
+        const x = Math.min(Math.round(marker.x + marker.w + marker.w * 0.5), Math.round(canvas.width * 0.18));
+        const top = Math.max(0, Math.round(marker.y - marker.h * 0.5));
+        const bottom = Math.min(
+          canvas.height,
+          nextMarker ? Math.max(nextMarker.y - 6, marker.y + marker.h * 2.8) : marker.y + marker.h * 3.6
+        );
+        const cropWidth = Math.max(80, rightEdge - x);
+        const cropHeight = Math.max(28, Math.round(bottom - top));
+        if (cropWidth < 80 || cropHeight < 28) return;
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = cropWidth * 2;
+        cropCanvas.height = cropHeight * 2;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.scale(2, 2);
+        cropCtx.drawImage(canvas, x, top, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+        crops.push({ canvas: preprocessCanvasForOCR(cropCanvas), marker, index });
+      });
+      return crops;
+    }
+
+    function extractSingleStopAddress(raw) {
+      const lines = (raw || '')
+        .split(/\n+/)
+        .map((line) => cleanAddress(line))
+        .filter(Boolean)
+        .filter((line) => {
+          const lower = normalize(line);
+          return !(/entrega|etiqueta|estoy llegando|horario|zona|pedido|cliente|telefono|tel|nota|observacion/.test(lower) || /^\d+[.)-]?\s*$/.test(lower));
+        });
+
+      if (!lines.length) return '';
+      const candidates = extractAddressCandidates(lines.join('\n'));
+      if (candidates.length) {
+        candidates.sort((a, b) => b.length - a.length);
+        return candidates[0];
+      }
+      const firstStrong = lines.find((line) => likelyAddress(line));
+      return firstStrong || '';
+    }
+
+    async function analyzeImageFile(file, options = {}) {
+      const img = await loadImageElement(file);
+      const canvas = buildCanvasFromImage(img, options.maxWidth || 900);
+      const markers = detectGreenMarkers(canvas);
+      const texts = [];
+      const candidates = [];
+
+      if (markers.length >= 2) {
+        const crops = buildStopCropCanvases(canvas, markers);
+        for (let i = 0; i < crops.length; i += 1) {
+          const cropFile = await canvasToFile(crops[i].canvas, `stop-${uid()}.png`);
+          const text = await runOcrOnFile(cropFile);
+          if (text && text.trim()) texts.push(`[PARADA ${i + 1}]\n${text}`);
+          const address = extractSingleStopAddress(text);
+          if (address) candidates.push(address);
+        }
+      }
+
+      if (!candidates.length) {
+        const fallbackFile = await canvasToFile(preprocessCanvasForOCR(canvas), `full-${uid()}.png`);
+        const fallbackText = await runOcrOnFile(fallbackFile);
+        if (fallbackText && fallbackText.trim()) texts.push(fallbackText);
+        candidates.push(...extractAddressCandidates(fallbackText));
+      }
+
+      const unique = [];
+      const seen = new Set();
+      for (const item of candidates) {
+        const cleaned = cleanAddress(item);
+        const key = normalize(cleaned);
+        if (!cleaned || seen.has(key)) continue;
+        seen.add(key);
+        unique.push(cleaned);
+      }
+
+      return {
+        text: texts.join('\n\n').trim(),
+        candidates: unique,
+        markers: markers.length,
+      };
+    }
+
     async function runOcrForAllImages() {
       if (!state.images.length) {
         setStatus('Primero agrega imágenes o captura frames.');
         return;
       }
       try {
-        setProgress('Leyendo capturas con OCR...', 5);
+        setProgress('Leyendo capturas por parada...', 5);
         let combinedText = $('rawText').value ? $('rawText').value + '\n' : '';
         let allCandidates = [];
+        let totalMarkers = 0;
         for (let i = 0; i < state.images.length; i += 1) {
           const image = state.images[i];
-          const text = await runOcrOnFile(image.file);
-          combinedText += `${text}\n`;
-          allCandidates = allCandidates.concat(extractAddressCandidates(text));
-          setProgress('Leyendo capturas con OCR...', Math.round(((i + 1) / state.images.length) * 100));
+          const analysis = await analyzeImageFile(image.file);
+          combinedText += `${analysis.text}\n`;
+          allCandidates = allCandidates.concat(analysis.candidates);
+          totalMarkers += analysis.markers || 0;
+          setProgress('Leyendo capturas por parada...', Math.round(((i + 1) / state.images.length) * 100));
         }
         $('rawText').value = combinedText.trim();
         const added = mergeAddresses(allCandidates, 'ocr');
-        setStatus(`OCR terminado. Se agregaron ${added} dirección(es) nuevas.`);
+        setStatus(`OCR terminado. Cuadros verdes detectados: ${totalMarkers}. Direcciones nuevas agregadas: ${added}.`);
       } catch (error) {
         setStatus(`Error leyendo capturas: ${error.message}`);
       } finally {
@@ -993,14 +1207,14 @@
 
     async function detectCurrentScreen() {
       try {
-        setProgress('Leyendo pantalla actual...', 15);
+        setProgress('Leyendo pantalla actual por parada...', 15);
         const blob = await captureCurrentFrameBlob();
         const file = new File([blob], `screen-ocr-${uid()}.png`, { type: 'image/png' });
-        setProgress('Leyendo pantalla actual...', 55);
-        const text = await runOcrOnFile(file);
-        $('rawText').value = `${$('rawText').value}\n${text}`.trim();
-        const added = mergeAddresses(extractAddressCandidates(text), 'screen-ocr');
-        setStatus(`Pantalla analizada. Se agregaron ${added} dirección(es) nuevas.`);
+        setProgress('Leyendo pantalla actual por parada...', 45);
+        const analysis = await analyzeImageFile(file, { maxWidth: 1100 });
+        $('rawText').value = `${$('rawText').value}\n${analysis.text}`.trim();
+        const added = mergeAddresses(analysis.candidates, 'screen-ocr');
+        setStatus(`Pantalla analizada. Cuadros verdes: ${analysis.markers || 0}. Direcciones nuevas: ${added}.`);
       } catch (error) {
         setStatus(`No se pudo leer la pantalla: ${error.message}`);
       } finally {
