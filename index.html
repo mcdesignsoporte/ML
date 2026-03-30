@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ML Rutas Optimizer</title>
-  <script id="tesseract-cdn" src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     :root {
       --bg: #f5f7fb;
@@ -420,8 +420,8 @@
             <p><strong>Sube imágenes o pega capturas con Ctrl + V</strong></p>
             <p class="muted">También se agregan aquí los frames capturados desde la pestaña Pantalla</p>
             <div class="row" style="justify-content:center; margin-top:12px;">
-              <button type="button" class="btn-primary" id="btnPickImages">Seleccionar capturas</button>
-              <button type="button" class="btn-secondary" id="btnRunOcr">Leer capturas</button>
+              <button class="btn-primary" id="btnPickImages">Seleccionar capturas</button>
+              <button class="btn-secondary" id="btnRunOcr">Leer capturas</button>
             </div>
           </div>
           <div class="preview-grid" id="previewGrid"></div>
@@ -525,72 +525,6 @@
     const progressLabel = $('progressLabel');
     const progressBar = $('progressBar');
     const screenVideo = $('screenVideo');
-    let ocrLoaderPromise = null;
-
-    function uid() {
-      return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    }
-
-    function setOcrButtonsDisabled(disabled) {
-      ['btnRunOcr', 'btnDetectScreen', 'btnCaptureFrame'].forEach((id) => {
-        const el = $(id);
-        if (el) el.disabled = !!disabled;
-      });
-    }
-
-    function loadScriptOnce(src) {
-      return new Promise((resolve, reject) => {
-        const existing = Array.from(document.querySelectorAll('script')).find((s) => s.src === src);
-        if (existing) {
-          if (window.Tesseract) {
-            resolve(window.Tesseract);
-            return;
-          }
-          existing.addEventListener('load', () => resolve(window.Tesseract), { once: true });
-          existing.addEventListener('error', () => reject(new Error(`No se pudo cargar ${src}`)), { once: true });
-          return;
-        }
-        const script = document.createElement('script');
-        script.src = src;
-        script.async = true;
-        script.onload = () => resolve(window.Tesseract);
-        script.onerror = () => reject(new Error(`No se pudo cargar ${src}`));
-        document.head.appendChild(script);
-      });
-    }
-
-    async function ensureTesseractLoaded() {
-      if (window.Tesseract) return window.Tesseract;
-      if (ocrLoaderPromise) return ocrLoaderPromise;
-
-      const sources = [
-        './vendor/tesseract.min.js',
-        'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
-        'https://unpkg.com/tesseract.js@5/dist/tesseract.min.js',
-      ];
-
-      ocrLoaderPromise = (async () => {
-        let lastError = null;
-        for (const src of sources) {
-          try {
-            await loadScriptOnce(src);
-            if (window.Tesseract) return window.Tesseract;
-          } catch (error) {
-            lastError = error;
-          }
-        }
-        const localHint = location.protocol === 'file:'
-          ? ' Abre la app desde GitHub Pages o con un servidor local para que el OCR cargue mejor.'
-          : '';
-        throw new Error(`No se pudo cargar el motor OCR.${localHint}${lastError ? ' ' + lastError.message : ''}`);
-      })();
-
-      try {
-        return await ocrLoaderPromise;
-      } finally {
-        if (!window.Tesseract) ocrLoaderPromise = null;
-      }
-    }
 
     const normalize = (value) =>
       (value || '')
@@ -608,155 +542,68 @@
         .replace(/,+/g, ',')
         .trim();
 
-    
-const STREET_HINTS = [
-  'calle', 'av', 'avenida', 'blvd', 'boulevard', 'privada', 'prol', 'prolongacion',
-  'circuito', 'camino', 'carretera', 'fracc', 'fraccionamiento', 'col', 'colonia',
-  'eje', 'torre', 'cerrada', 'andador', 'retorno', 'mision', 'san ', 'villa ',
-  'lote', 'manzana', 'int', 'interior', 'ext', 'numero', 'no', 'cp', 'c.p', 'slp',
-  'san luis potosi', 'mexico'
-];
+    const STREET_HINTS = [
+      'calle', 'av', 'avenida', 'blvd', 'boulevard', 'privada', 'prol', 'prolongacion',
+      'circuito', 'camino', 'carretera', 'fracc', 'fraccionamiento', 'col', 'colonia',
+      'lote', 'manzana', 'int', 'interior', 'ext', 'numero', 'no', 'cp', 'c.p', 'slp',
+      'san luis potosi', 'mexico'
+    ];
 
-const LOCALITY_HINTS = [
-  'san luis potosi', 's.l.p', 'slp', 'pozos', 'villa de pozos', 'mision del palmar',
-  'los silos', 'fraccionamiento', 'residencial', 'colonia', 'villas', 'privadas'
-];
+    function uid() {
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    }
 
-const IGNORE_PATTERNS = [
-  /\bmercado libre\b/i,
-  /\bestoy llegando\b/i,
-  /\bentrega\b/i,
-  /\betiqueta\b/i,
-  /\bhorario comercial\b/i,
-  /\bpedido\b/i,
-  /\bcliente\b/i,
-  /\btelefono\b/i,
-  /\bobservaciones\b/i,
-  /\bnotas\b/i,
-  /\bzona\b/i,
-  /\bcobro\b/i,
-  /\bpaquete\b/i,
-  /\bunidad\b/i,
-  /\bhs\b/i,
-  /\b\d{1,2}:\d{2}\b/,
-];
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
 
-function hasStreetHint(text) {
-  return STREET_HINTS.some((hint) => text.includes(hint));
-}
+    function setProgress(label, value) {
+      progressWrap.style.display = 'block';
+      progressLabel.textContent = label;
+      progressBar.style.width = `${Math.max(0, Math.min(100, value))}%`;
+    }
 
-function hasHouseNumber(text) {
-  return /\b\d+[a-zA-Z-]*\b|\b[a-zA-Z-]*\d+[a-zA-Z-]*\b/.test(text);
-}
+    function clearProgress() {
+      progressWrap.style.display = 'none';
+      progressBar.style.width = '0%';
+    }
 
-function hasZipCode(text) {
-  return /(^|\D)\d{5}(\D|$)/.test(text);
-}
+    function likelyAddress(line) {
+      const text = normalize(line);
+      const hasStreetHint = STREET_HINTS.some((hint) => text.includes(hint));
+      const hasNumber = /\d/.test(text);
+      return text.length > 12 && (hasStreetHint || hasNumber);
+    }
 
-function hasLocalityHint(text) {
-  return LOCALITY_HINTS.some((hint) => text.includes(hint));
-}
+    function extractAddressCandidates(raw) {
+      const lines = (raw || '')
+        .split(/\n+/)
+        .map((line) => cleanAddress(line))
+        .filter(Boolean)
+        .filter((line) => !/^entregado|^ruta|^pedido|^cliente|^telefono|^tel|^notas|^observaciones/i.test(line));
 
-function looksLikeLocalityOnly(text) {
-  return hasLocalityHint(text) && !hasStreetHint(text) && !hasHouseNumber(text);
-}
-
-function isNoiseLine(text) {
-  if (!text || text.length < 6) return true;
-  if (IGNORE_PATTERNS.some((pattern) => pattern.test(text))) return true;
-  if (/^[\[\](){}.,\-–—_:;]+$/.test(text)) return true;
-  if (/^\d+[.)-]?\s*$/.test(text)) return true;
-  return false;
-}
-
-function isGenericFragment(text) {
-  const norm = normalize(text);
-  const words = norm.split(' ').filter(Boolean);
-  if (/^(casa|domicilio|frente|atras|atrás|junto)\b/.test(norm) && !hasStreetHint(norm) && !hasZipCode(norm)) return true;
-  if (words.length <= 2 && !hasStreetHint(norm) && !hasZipCode(norm)) return true;
-  return false;
-}
-
-function addressScore(value) {
-  const text = normalize(value);
-  let score = 0;
-  if (hasStreetHint(text)) score += 2;
-  if (hasHouseNumber(text)) score += 2;
-  if (hasZipCode(text)) score += 2;
-  if (hasLocalityHint(text)) score += 1;
-  if ((text.match(/,/g) || []).length >= 1) score += 1;
-  if (/\b[a-zA-Záéíóúñ]{4,}\s+\d+[a-zA-Z-]*\b/i.test(value)) score += 1;
-  if (/\b(calle|avenida|av\.?|prol\.?|privada|eje|torre)\b/i.test(value)) score += 1;
-  if (isGenericFragment(text)) score -= 3;
-  if (isNoiseLine(text)) score -= 4;
-  return score;
-}
-
-
-function likelyAddress(line) {
-  return addressScore(line) >= 3;
-}
-
-function extractAddressCandidates(raw) {
-  const lines = (raw || '')
-    .split(/\n+/)
-    .map((line) => cleanAddress(line))
-    .filter(Boolean)
-    .filter((line) => !isNoiseLine(normalize(line)));
-
-  const candidates = [];
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const current = lines[i];
-    const currentNorm = normalize(current);
-    const next = lines[i + 1] || '';
-    const nextNorm = normalize(next);
-
-    if (isNoiseLine(currentNorm)) continue;
-
-    let candidate = current;
-    const currentPartial = (
-      (hasStreetHint(currentNorm) && !hasHouseNumber(currentNorm) && !hasZipCode(currentNorm)) ||
-      /[,\-]$/.test(current) ||
-      (current.length < 24 && hasStreetHint(currentNorm)) ||
-      (hasHouseNumber(currentNorm) && !hasLocalityHint(currentNorm) && next && looksLikeLocalityOnly(nextNorm))
-    );
-
-    if (currentPartial && next && !isNoiseLine(nextNorm)) {
-      if (looksLikeLocalityOnly(nextNorm) || (hasZipCode(nextNorm) && !hasStreetHint(nextNorm))) {
-        candidate = cleanAddress(`${current}, ${next}`);
-        i += 1;
+      const candidates = [];
+      for (let i = 0; i < lines.length; i += 1) {
+        const current = lines[i];
+        const next = lines[i + 1] || '';
+        const merged = cleanAddress(`${current}, ${next}`);
+        if (likelyAddress(merged)) candidates.push(merged);
+        else if (likelyAddress(current)) candidates.push(current);
       }
-    }
 
-    if (!likelyAddress(candidate)) {
-      if (hasHouseNumber(currentNorm) && currentNorm.split(' ').length >= 3 && !isGenericFragment(currentNorm)) {
-        candidate = current;
-      } else {
-        continue;
+      const unique = [];
+      const seen = new Set();
+      for (const item of candidates) {
+        const key = normalize(item);
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(item);
+        }
       }
+      return unique.slice(0, 300);
     }
 
-    if (isGenericFragment(normalize(candidate)) && !hasZipCode(normalize(candidate)) && !hasStreetHint(normalize(candidate))) {
-      continue;
-    }
-
-    candidates.push(candidate);
-  }
-
-  const unique = [];
-  const seen = new Set();
-  for (const item of candidates) {
-    const key = normalize(item);
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(item);
-    }
-  }
-  return unique.slice(0, 500);
-}
-
-function mergeAddresses(addresses, source = 'ocr') {
+    function mergeAddresses(addresses, source = 'ocr') {
       const seen = new Set(state.stops.map((s) => normalize(s.address)));
       let added = 0;
       addresses.forEach((address) => {
@@ -1043,111 +890,38 @@ function mergeAddresses(addresses, source = 'ocr') {
       setStatus(`${files.length} imagen(es) agregadas.`);
     }
 
-    
-async function loadImageElement(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('No se pudo leer la imagen.'));
-    };
-    img.src = url;
-  });
-}
-
-async function createCardSliceFiles(file) {
-  const img = await loadImageElement(file);
-  if (!(img.height > img.width * 1.2 && img.width <= 900)) return [];
-
-  const estimated = Math.min(14, Math.max(6, Math.round(img.height / 95)));
-  const sliceHeight = Math.max(72, Math.round(img.height / estimated));
-  const step = Math.max(56, Math.round(sliceHeight * 0.82));
-  const files = [];
-
-  for (let y = 0; y < img.height - 30; y += step) {
-    const canvas = document.createElement('canvas');
-    const cropHeight = Math.min(sliceHeight, img.height - y);
-    canvas.width = img.width * 1.5;
-    canvas.height = cropHeight * 1.5;
-    const ctx = canvas.getContext('2d');
-    ctx.scale(1.5, 1.5);
-    ctx.drawImage(img, 0, y, img.width, cropHeight, 0, 0, img.width, cropHeight);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    if (!blob) continue;
-    files.push(new File([blob], `slice-${uid()}.png`, { type: 'image/png' }));
-  }
-  return files;
-}
-
-async function runOcrOnFile(file) {
-  const TesseractLib = await ensureTesseractLoaded();
-  const result = await TesseractLib.recognize(file, 'spa+eng', {
-    logger: (m) => {
-      if (typeof m?.progress === 'number') {
-        const pct = Math.max(1, Math.min(99, Math.round(m.progress * 100)));
-        const label = m.status ? `OCR: ${m.status}` : 'Procesando OCR...';
-        setProgress(label, pct);
-      }
-    },
-  });
-  return result?.data?.text || '';
-}
-
-async function analyzeImageFile(file) {
-  const texts = [];
-  const wholeText = await runOcrOnFile(file);
-  texts.push(wholeText);
-
-  const sliceFiles = await createCardSliceFiles(file);
-  for (let i = 0; i < sliceFiles.length; i += 1) {
-    const sliceText = await runOcrOnFile(sliceFiles[i]);
-    if (sliceText && sliceText.trim()) texts.push(sliceText);
-  }
-
-  const joined = texts.join('\n').trim();
-  return {
-    text: joined,
-    candidates: extractAddressCandidates(joined),
-  };
-}
-
-async function runOcrForAllImages() {
-  if (!state.images.length) {
-    setStatus('Primero agrega imágenes o captura frames.');
-    return;
-  }
-  try {
-    setOcrButtonsDisabled(true);
-    setStatus('Iniciando OCR de capturas...');
-    setProgress('Preparando motor OCR...', 3);
-    await ensureTesseractLoaded();
-    let combinedText = $('rawText').value ? $('rawText').value + '\n' : '';
-    let allCandidates = [];
-    for (let i = 0; i < state.images.length; i += 1) {
-      const image = state.images[i];
-      setProgress(`Leyendo captura ${i + 1} de ${state.images.length}...`, Math.round((i / state.images.length) * 100));
-      const analysis = await analyzeImageFile(image.file);
-      combinedText += `${analysis.text}\n`;
-      allCandidates = allCandidates.concat(analysis.candidates);
-      setProgress(`Leyendo captura ${i + 1} de ${state.images.length}...`, Math.round(((i + 1) / state.images.length) * 100));
+    async function runOcrOnFile(file) {
+      const result = await Tesseract.recognize(file, 'spa+eng');
+      return result.data.text || '';
     }
-    $('rawText').value = combinedText.trim();
-    const added = mergeAddresses(allCandidates, 'ocr');
-    setStatus(`OCR terminado. Se agregaron ${added} dirección(es) nuevas.`);
-  } catch (error) {
-    setStatus(`Error leyendo capturas: ${error.message}`);
-  } finally {
-    setOcrButtonsDisabled(false);
-    clearProgress();
-  }
-}
 
-async function shareScreen() {
+    async function runOcrForAllImages() {
+      if (!state.images.length) {
+        setStatus('Primero agrega imágenes o captura frames.');
+        return;
+      }
+      try {
+        setProgress('Leyendo capturas con OCR...', 5);
+        let combinedText = $('rawText').value ? $('rawText').value + '\n' : '';
+        let allCandidates = [];
+        for (let i = 0; i < state.images.length; i += 1) {
+          const image = state.images[i];
+          const text = await runOcrOnFile(image.file);
+          combinedText += `${text}\n`;
+          allCandidates = allCandidates.concat(extractAddressCandidates(text));
+          setProgress('Leyendo capturas con OCR...', Math.round(((i + 1) / state.images.length) * 100));
+        }
+        $('rawText').value = combinedText.trim();
+        const added = mergeAddresses(allCandidates, 'ocr');
+        setStatus(`OCR terminado. Se agregaron ${added} dirección(es) nuevas.`);
+      } catch (error) {
+        setStatus(`Error leyendo capturas: ${error.message}`);
+      } finally {
+        clearProgress();
+      }
+    }
+
+    async function shareScreen() {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({
           video: { frameRate: { ideal: 10, max: 15 } },
@@ -1217,29 +991,24 @@ async function shareScreen() {
       }
     }
 
-    
-async function detectCurrentScreen() {
-  try {
-    setOcrButtonsDisabled(true);
-    setStatus('Iniciando OCR sobre la pantalla actual...');
-    setProgress('Leyendo pantalla actual...', 15);
-    await ensureTesseractLoaded();
-    const blob = await captureCurrentFrameBlob();
-    const file = new File([blob], `screen-ocr-${uid()}.png`, { type: 'image/png' });
-    setProgress('Leyendo pantalla actual...', 55);
-    const analysis = await analyzeImageFile(file);
-    $('rawText').value = `${$('rawText').value}\n${analysis.text}`.trim();
-    const added = mergeAddresses(analysis.candidates, 'screen-ocr');
-    setStatus(`Pantalla analizada. Se agregaron ${added} dirección(es) nuevas.`);
-  } catch (error) {
-    setStatus(`No se pudo leer la pantalla: ${error.message}`);
-  } finally {
-    setOcrButtonsDisabled(false);
-    clearProgress();
-  }
-}
+    async function detectCurrentScreen() {
+      try {
+        setProgress('Leyendo pantalla actual...', 15);
+        const blob = await captureCurrentFrameBlob();
+        const file = new File([blob], `screen-ocr-${uid()}.png`, { type: 'image/png' });
+        setProgress('Leyendo pantalla actual...', 55);
+        const text = await runOcrOnFile(file);
+        $('rawText').value = `${$('rawText').value}\n${text}`.trim();
+        const added = mergeAddresses(extractAddressCandidates(text), 'screen-ocr');
+        setStatus(`Pantalla analizada. Se agregaron ${added} dirección(es) nuevas.`);
+      } catch (error) {
+        setStatus(`No se pudo leer la pantalla: ${error.message}`);
+      } finally {
+        clearProgress();
+      }
+    }
 
-function startRecording() {
+    function startRecording() {
       if (!state.screenStream) {
         setStatus('Primero comparte pantalla.');
         return;
@@ -1403,11 +1172,7 @@ function startRecording() {
 
     function initUploadZone() {
       $('btnPickImages').onclick = () => $('fileInput').click();
-      $('fileInput').onchange = (e) => {
-        const files = Array.from(e.target.files || []);
-        if (files.length) addFiles(files, 'upload');
-        e.target.value = '';
-      };
+      $('fileInput').onchange = (e) => addFiles(Array.from(e.target.files || []), 'upload');
 
       const drop = $('dropZone');
       drop.addEventListener('paste', (event) => {
